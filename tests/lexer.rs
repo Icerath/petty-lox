@@ -10,13 +10,17 @@ macro_rules! test_file {
                 },
             };
             let output = run_get_string(args).unwrap();
-            let expected = $expected;
-            assert_eq!(output.trim(), expected.trim());
+            let output = output.trim();
+            let expected = $expected.trim();
+            assert!(
+                output == expected,
+                "--- Expected ---\n\n{expected}\n\n---Got---\n\n{output}"
+            );
         }
     };
 }
 
-test_file!(
+test_file! {
     hello_world,
     "examples/hello_world.lox",
     r#"
@@ -24,4 +28,22 @@ PRINT
 STRING "Hello, World!"
 EOF
 "#
-);
+}
+
+test_file! {
+    numbers,
+    "tests/lox/numbers.lox",
+    r#"
+NUMBER 123
+NUMBER -123.456
+DOT
+NUMBER -123
+NUMBER 456
+DOT
+NUMBER 123
+DOT
+DOT
+NUMBER 456
+EOF
+"#
+}

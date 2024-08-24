@@ -18,7 +18,7 @@ pub fn run(args: Args) -> eyre::Result<()> {
 
 pub fn run_get_string(args: Args) -> eyre::Result<String> {
     let mut buf = vec![];
-    run_with(args, &mut buf).unwrap();
+    run_with(args, &mut buf)?;
     Ok(String::from_utf8(buf)?)
 }
 

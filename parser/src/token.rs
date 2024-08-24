@@ -49,17 +49,21 @@ pub enum Token<'a> {
     Ident(&'a str),
     #[regex(r#""([^"]|\\")*""#, parse_str)]
     String(Cow<'a, str>),
-    #[regex("r-?[0-9_]+", parse_integer)]
-    #[regex(r"-?[0-9_]+\.[0-9_]+", parse_float)]
+    #[regex(r"-?[0-9][0-9_]*\.[0-9_]+", parse_float)]
+    #[regex(r"-?[0-9][0-9_]*", parse_integer)]
     Number(f64),
 }
 
 fn parse_integer<'a>(lex: &mut Lexer<'a, Token<'a>>) -> Result<f64, ()> {
-    lex.slice().parse::<i32>().map_err(|_| ()).map(f64::from)
+    lex.slice()
+        .replace("_", "")
+        .parse::<i32>()
+        .map_err(|_| ())
+        .map(f64::from)
 }
 
 fn parse_float<'a>(lex: &mut Lexer<'a, Token<'a>>) -> Result<f64, ()> {
-    lex.slice().parse().map_err(|_| ())
+    lex.slice().replace("_", "").parse().map_err(|_| ())
 }
 
 fn parse_str<'a>(lex: &mut Lexer<'a, Token<'a>>) -> Cow<'a, str> {
