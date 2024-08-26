@@ -46,8 +46,18 @@ impl Interpreter {
     fn exec_bin_expr(&mut self, operator: BinaryOp, [lhs, rhs]: &[Expression; 2]) -> Value {
         use BinaryOp as Op;
         match operator {
-            Op::Plus
-            | Op::Minus
+            Op::Plus => {
+                let lhs = self.exec_expression(lhs);
+                let rhs = self.exec_expression(rhs);
+                match (lhs, rhs) {
+                    (Value::Number(lhs), Value::Number(rhs)) => Value::Number(lhs + rhs),
+                    (Value::String(lhs), Value::String(rhs)) => {
+                        Value::String((lhs.to_owned() + &rhs).into())
+                    }
+                    _ => panic!(),
+                }
+            }
+            Op::Minus
             | Op::Multiply
             | Op::Divide
             | Op::Less
@@ -61,7 +71,6 @@ impl Interpreter {
                 let Value::Number(rhs) = rhs else { todo!("{rhs:?}") };
 
                 match operator {
-                    Op::Plus => Value::Number(lhs + rhs),
                     Op::Minus => Value::Number(lhs - rhs),
                     Op::Multiply => Value::Number(lhs * rhs),
                     Op::Divide => Value::Number(lhs / rhs),
