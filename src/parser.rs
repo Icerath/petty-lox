@@ -41,6 +41,7 @@ pub fn parse_statement(lexer: &mut Lexer) -> Result<Statement> {
         Token::KwIf => Statement::If(parse_if_stmt(lexer)?),
         Token::KwWhile => parse_while_loop(lexer)?,
         Token::KwFor => parse_for_loop(lexer)?,
+        Token::KwFun => Statement::FunDef(parse_fun_def(lexer)?),
         Token::KwVar => parse_var_decl(lexer)?,
         Token::KwPrint => Statement::Print(parse_expression(lexer)?),
         Token::KwBreak => Statement::Break(parse_expression(lexer)?),
@@ -126,7 +127,7 @@ pub fn parse_super_expr(lexer: &mut Lexer) -> Result<Expression> {
         let Token::LParen = token else { break };
         _ = lexer.next();
         let args = parse_seperated_exprs(lexer, Token::Comma, Token::RParen)?;
-        root = Expression::FunCall { expr: Box::new(root), args };
+        root = Expression::FunCall { fun: Box::new(root), args };
     }
 
     Ok(root)
@@ -153,6 +154,24 @@ pub fn parse_seperated_exprs(
     Ok(atoms.into())
 }
 
+pub fn parse_seperated_idents(
+    lexer: &mut Lexer,
+    seperator: Token,
+    terminator: Token,
+) -> Result<Box<[Ustr]>> {
+    let mut idents = vec![];
+
+    while let Some(token) = lexer.next().transpose()? {
+        match token {
+            Token::Ident(ident) => idents.push(ident),
+            token if token == seperator => continue,
+            token if token == terminator => break,
+            token => return Err(ParseError::UnexpectedToken(token)),
+        }
+    }
+    Ok(idents.into())
+}
+
 pub fn parse_atom(lexer: &mut Lexer) -> Result<Expression> {
     let expr = parse_atom_inner(lexer)?;
     let Some(Token::LParen) = lexer.clone().next().transpose()? else {
@@ -160,7 +179,7 @@ pub fn parse_atom(lexer: &mut Lexer) -> Result<Expression> {
     };
     _ = lexer.next();
     let args = parse_seperated_exprs(lexer, Token::Comma, Token::RParen)?;
-    Ok(Expression::FunCall { expr: Box::new(expr), args })
+    Ok(Expression::FunCall { fun: Box::new(expr), args })
 }
 
 pub fn parse_atom_inner(lexer: &mut Lexer) -> Result<Expression> {
@@ -269,6 +288,19 @@ pub fn parse_for_loop(lexer: &mut Lexer) -> Result<Statement> {
     Ok(Statement::For { init: Box::new(init), condition, counter: Box::new(counter), body })
 }
 
+pub fn parse_fun_def(lexer: &mut Lexer) -> Result<FunDefinition> {
+    let name = match lexer.next().transpose()? {
+        Some(Token::Ident(ident)) => ident,
+        Some(token) => return Err(ParseError::UnexpectedToken(token)),
+        None => return Err(ParseError::UnexpectedEof),
+    };
+    expect(Token::LParen, lexer)?;
+    let arguments = parse_seperated_idents(lexer, Token::Comma, Token::RParen)?;
+    expect(Token::LBrace, lexer)?;
+    let body = parse_block(lexer)?;
+    Ok(FunDefinition { name, arguments, body })
+}
+
 fn expect(expected: Token, lexer: &mut Lexer) -> Result<()> {
     match lexer.next().transpose()? {
         None => Err(ParseError::UnexpectedEof),
@@ -285,7 +317,7 @@ pub enum Node {
 pub enum Expression {
     Literal(Literal),
     Identifier(Ident),
-    FunCall { expr: Box<Expression>, args: ExpressionList },
+    FunCall { fun: Box<Expression>, args: ExpressionList },
     UnaryExpr { operator: UnaryOp, operand: Box<Expression> },
     BinaryExpr { operator: BinaryOp, operands: Box<[Expression; 2]> },
 }
@@ -310,7 +342,6 @@ impl From<Literal> for Expression {
     }
 }
 
-#[derive(Debug)]
 pub struct FunDefinition {
     pub name: Ustr,
     pub arguments: Box<[Ident]>,
@@ -396,9 +427,9 @@ impl fmt::Debug for Expression {
         match self {
             Self::Literal(literal) => fmt::Display::fmt(literal, f),
             Self::Identifier(ident) => write!(f, "IDENT {ident}"),
-            Self::FunCall { expr, args } => f
+            Self::FunCall { fun, args } => f
                 .debug_struct("FunctionCall")
-                .field("Expr", expr)
+                .field("function", fun)
                 .field("arguments", &args)
                 .finish(),
             Self::UnaryExpr { operator, operand } => {
@@ -463,5 +494,22 @@ impl fmt::Display for Literal {
             Self::Number(number) => write!(f, "NUMBER {number}"),
             Self::String(string) => write!(f, "STRING {:?}", string.as_str()),
         }
+    }
+}
+
+impl fmt::Debug for FunDefinition {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        struct Args<'a>(&'a [Ustr]);
+        impl fmt::Debug for Args<'_> {
+            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                f.debug_list().entries(self.0.iter().map(|ident| ident.as_str())).finish()
+            }
+        }
+
+        f.debug_struct("Fun")
+            .field("name", &self.name.as_str())
+            .field("arguments", &Args(self.arguments.as_ref()))
+            .field("body", &self.body)
+            .finish()
     }
 }
