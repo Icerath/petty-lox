@@ -139,14 +139,17 @@ pub fn parse_seperated_exprs(
 ) -> Result<Box<[Expression]>> {
     let mut atoms = vec![];
     loop {
-        match lexer.clone().next().transpose()? {
+        let pre = lexer.clone();
+        match lexer.next().transpose()? {
             None => break,
             Some(token) if token == seperator => continue,
             Some(token) if token == terminator => break,
-            Some(_) => atoms.push(parse_expression(lexer)?),
+            Some(_) => {
+                *lexer = pre;
+                atoms.push(parse_expression(lexer)?)
+            }
         }
     }
-    _ = lexer.next();
     Ok(atoms.into())
 }
 
