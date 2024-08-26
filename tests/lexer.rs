@@ -4,18 +4,11 @@ macro_rules! test_file {
     ($name: ident, $path: literal, $expected: literal) => {
         #[test]
         fn $name() {
-            let args = Args {
-                subcommand: Subcommand::Tokenize {
-                    input: $path.into(),
-                },
-            };
+            let args = Args { subcommand: Subcommand::Tokenize { input: $path.into() } };
             let output = run_get_string(args).unwrap();
             let output = output.trim();
             let expected = $expected.trim();
-            assert!(
-                output == expected,
-                "--- Expected ---\n\n{expected}\n\n---Got---\n\n{output}"
-            );
+            assert!(output == expected, "--- Expected ---\n\n{expected}\n\n---Got---\n\n{output}");
         }
     };
 }
@@ -35,9 +28,11 @@ test_file! {
     "tests/lox/numbers.lox",
     r#"
 NUMBER 123
-NUMBER -123.456
+MINUS
+NUMBER 123.456
 DOT
-NUMBER -123
+MINUS
+NUMBER 123
 NUMBER 456
 DOT
 NUMBER 123

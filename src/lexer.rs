@@ -1,12 +1,20 @@
-use std::{borrow::Cow, fmt};
+use std::{fmt, ops::Range};
+//
+use logos::{Lexer, Logos};
+use ustr::Ustr;
 
-use logos::Lexer;
+#[derive(Debug, PartialEq, Clone, Default, thiserror::Error)]
+#[error("Lex Error")]
+pub struct Error;
+
+pub type Result<T, E = Error> = std::result::Result<T, E>;
 
 #[rustfmt::skip]
-#[derive(Debug, logos::Logos)]
+#[derive(Debug, Clone, PartialEq, logos::Logos)]
 #[logos(skip r"[ \t\s\r\n]")]
-#[logos(skip r"//[^\n]\n")]
-pub enum Token<'a> {
+#[logos(skip r"//[^\n]*\n?")]
+#[logos(error = Error)]
+pub enum Token {
     //Tokens
     #[token("(")] LParen,
     #[token(")")] RParen,
@@ -29,6 +37,7 @@ pub enum Token<'a> {
     #[token("<=")] LessEq,
     // Keywords
     #[token("and")] KwAnd,
+    #[token("break")] KwBreak,
     #[token("class")] KwClass,
     #[token("else")] KwElse,
     #[token("false")] KwFalse,
@@ -45,34 +54,38 @@ pub enum Token<'a> {
     #[token("var")] KwVar,
     #[token("while")] KwWhile,
     // Literals
-    #[regex("[a-zA-Z_][a-zA-Z_0-9]*")]
-    Ident(&'a str),
+    #[regex("[a-zA-Z_][a-zA-Z_0-9]*", |lex| Ustr::from(lex.slice()))]
+    Ident(Ustr),
     #[regex(r#""([^"]|\\")*""#, parse_str)]
-    String(Cow<'a, str>),
-    #[regex(r"-?[0-9][0-9_]*\.[0-9_]+", parse_float)]
-    #[regex(r"-?[0-9][0-9_]*", parse_integer)]
+    String(Ustr),
+    #[regex(r"[0-9][0-9_]*\.[0-9_]+", parse_float)]
+    #[regex(r"[0-9][0-9_]*", parse_integer)]
     Number(f64),
 }
 
-fn parse_integer<'a>(lex: &mut Lexer<'a, Token<'a>>) -> Result<f64, ()> {
-    lex.slice()
-        .replace("_", "")
-        .parse::<i32>()
-        .map_err(|_| ())
-        .map(f64::from)
+fn parse_integer(lex: &mut Lexer<'_, Token>) -> Result<f64> {
+    lex.slice().replace("_", "").parse::<u32>().map_err(|_| Error).map(f64::from)
 }
 
-fn parse_float<'a>(lex: &mut Lexer<'a, Token<'a>>) -> Result<f64, ()> {
-    lex.slice().replace("_", "").parse().map_err(|_| ())
+fn parse_float(lex: &mut Lexer<'_, Token>) -> Result<f64> {
+    lex.slice().replace("_", "").parse().map_err(|_| Error)
 }
 
-fn parse_str<'a>(lex: &mut Lexer<'a, Token<'a>>) -> Cow<'a, str> {
+fn parse_str(lex: &mut Lexer<'_, Token>) -> Ustr {
     let raw = &lex.slice()[1..lex.slice().len() - 1];
     // TODO: impl escape sequence
-    Cow::Borrowed(raw)
+    raw.into()
 }
 
-impl fmt::Display for Token<'_> {
+pub fn tokenize(source: &str) -> impl Iterator<Item = Result<Token>> + '_ {
+    Token::lexer(source)
+}
+
+pub fn tokenize_spanned(source: &str) -> impl Iterator<Item = (Result<Token>, Range<usize>)> + '_ {
+    Token::lexer(source).spanned()
+}
+
+impl fmt::Display for Token {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             //Tokens
@@ -97,6 +110,7 @@ impl fmt::Display for Token<'_> {
             Self::LessEq => write!(f, "LESS_EQUAL"),
             // Keywords
             Self::KwAnd => write!(f, "AND"),
+            Self::KwBreak => write!(f, "BREAK"),
             Self::KwClass => write!(f, "CLASS"),
             Self::KwElse => write!(f, "ELSE"),
             Self::KwFalse => write!(f, "FALSE"),
@@ -114,7 +128,7 @@ impl fmt::Display for Token<'_> {
             Self::KwWhile => write!(f, "WHILE"),
             // Literals
             Self::Ident(ident) => write!(f, "IDENT {ident}"),
-            Self::String(string) => write!(f, "STRING {string:?}"),
+            Self::String(string) => write!(f, "STRING {:?}", string.as_str()),
             Self::Number(number) => write!(f, "NUMBER {number}"),
         }
     }
