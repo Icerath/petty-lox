@@ -1,0 +1,15 @@
+class Breakfast {
+    cook() {
+        print "Eggs a-fryin'!";
+    }
+    serve(who) {
+        print "Enjoy your breakfast, " + who + ".";
+    }
+}
+
+class Brunch < Breakfast {
+    init(meat, bread, drink) {
+        super.init(meat, bread);
+        this.drink = drink;
+    }
+}

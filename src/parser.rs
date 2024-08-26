@@ -37,11 +37,13 @@ pub fn parse_statement(lexer: &mut Lexer) -> Result<Statement> {
         {
             parse_assignment(lexer, ident)?
         }
+        Token::KwThis => parse_this_assignment(lexer)?,
         Token::LBrace => parse_block(lexer).map(Statement::Block)?,
         Token::KwIf => Statement::If(parse_if_stmt(lexer)?),
         Token::KwWhile => parse_while_loop(lexer)?,
         Token::KwFor => parse_for_loop(lexer)?,
         Token::KwFun => Statement::FunDef(parse_fun_def(lexer)?),
+        Token::KwClass => Statement::ClassDef(parse_class_def(lexer)?),
         Token::KwVar => parse_var_decl(lexer)?,
         Token::KwPrint => Statement::Print(parse_expression(lexer)?),
         Token::KwBreak => Statement::Break(parse_expression(lexer)?),
@@ -199,6 +201,8 @@ pub fn parse_atom_inner(lexer: &mut Lexer) -> Result<Expression> {
         Token::String(string) => Literal::String(string).into(),
         Token::KwTrue => Literal::Boolean(true).into(),
         Token::KwFalse => Literal::Boolean(false).into(),
+        Token::KwSuper => Expression::Super,
+        Token::KwThis => Expression::This,
         Token::LParen => {
             let expr = parse_expression(lexer)?;
             expect(Token::RParen, lexer)?;
@@ -223,23 +227,28 @@ pub fn parse_assignment(lexer: &mut Lexer, root: Ustr) -> Result<Statement> {
             Token::Eq => break,
             _ => return Err(ParseError::UnexpectedToken(token)),
         };
-        let ident = match lexer.next().transpose()? {
-            Some(Token::Ident(ident)) => ident,
-            Some(token) => return Err(ParseError::UnexpectedToken(token)),
-            None => return Err(ParseError::UnexpectedEof),
-        };
-        lhs.push(ident);
+        lhs.push(expect_ident(lexer)?);
     }
     let expr = parse_expression(lexer)?;
     Ok(Statement::Assignment(lhs.into(), expr))
 }
 
+pub fn parse_this_assignment(lexer: &mut Lexer) -> Result<Statement> {
+    let mut lhs = vec![];
+    while let Some(token) = lexer.next().transpose()? {
+        match token {
+            Token::Dot => {}
+            Token::Eq => break,
+            _ => return Err(ParseError::UnexpectedToken(token)),
+        };
+        lhs.push(expect_ident(lexer)?);
+    }
+    let expr = parse_expression(lexer)?;
+    Ok(Statement::ThisAssignment(lhs.into(), expr))
+}
+
 pub fn parse_var_decl(lexer: &mut Lexer) -> Result<Statement> {
-    let ident = match lexer.next().transpose()? {
-        None => return Err(ParseError::UnexpectedEof),
-        Some(Token::Ident(ident)) => ident,
-        Some(token) => return Err(ParseError::UnexpectedToken(token)),
-    };
+    let ident = expect_ident(lexer)?;
     match lexer.next().transpose()? {
         None => return Err(ParseError::UnexpectedEof),
         Some(Token::Eq) => {}
@@ -289,16 +298,40 @@ pub fn parse_for_loop(lexer: &mut Lexer) -> Result<Statement> {
 }
 
 pub fn parse_fun_def(lexer: &mut Lexer) -> Result<FunDefinition> {
-    let name = match lexer.next().transpose()? {
-        Some(Token::Ident(ident)) => ident,
-        Some(token) => return Err(ParseError::UnexpectedToken(token)),
-        None => return Err(ParseError::UnexpectedEof),
-    };
+    let name = expect_ident(lexer)?;
     expect(Token::LParen, lexer)?;
     let arguments = parse_seperated_idents(lexer, Token::Comma, Token::RParen)?;
     expect(Token::LBrace, lexer)?;
     let body = parse_block(lexer)?;
     Ok(FunDefinition { name, arguments, body })
+}
+
+pub fn parse_class_def(lexer: &mut Lexer) -> Result<ClassDefinition> {
+    let name = expect_ident(lexer)?;
+    let inherits_from = match lexer.clone().next().transpose()? {
+        Some(Token::Less) => {
+            _ = lexer.next();
+            Some(expect_ident(lexer)?)
+        }
+        Some(Token::LBrace) => None,
+        Some(token) => return Err(ParseError::UnexpectedToken(token)),
+        None => return Err(ParseError::UnexpectedEof),
+    };
+    expect(Token::LBrace, lexer)?;
+    let mut methods = vec![];
+    while let Some(Token::Ident(_)) = lexer.clone().next().transpose()? {
+        methods.push(parse_fun_def(lexer)?);
+    }
+    expect(Token::RBrace, lexer)?;
+    Ok(ClassDefinition { name, inherits_from, methods: methods.into() })
+}
+
+fn expect_ident(lexer: &mut Lexer) -> Result<Ustr> {
+    match lexer.next().transpose()? {
+        Some(Token::Ident(ident)) => Ok(ident),
+        Some(token) => Err(ParseError::UnexpectedToken(token)),
+        None => Err(ParseError::UnexpectedEof),
+    }
 }
 
 fn expect(expected: Token, lexer: &mut Lexer) -> Result<()> {
@@ -315,6 +348,8 @@ pub enum Node {
 }
 
 pub enum Expression {
+    Super,
+    This,
     Literal(Literal),
     Identifier(Ident),
     FunCall { fun: Box<Expression>, args: ExpressionList },
@@ -324,6 +359,7 @@ pub enum Expression {
 
 pub enum Statement {
     Assignment(Box<[Ustr]>, Expression),
+    ThisAssignment(Box<[Ustr]>, Expression),
     Lone(Expression),
     Var(Ident, Option<Expression>),
     Return(Expression),
@@ -332,6 +368,7 @@ pub enum Statement {
     While(Expression, Block),
     For { init: Box<Statement>, condition: Expression, counter: Box<Statement>, body: Block },
     FunDef(FunDefinition),
+    ClassDef(ClassDefinition),
     If(IfStatement),
     Block(Block),
 }
@@ -346,6 +383,12 @@ pub struct FunDefinition {
     pub name: Ustr,
     pub arguments: Box<[Ident]>,
     pub body: Block,
+}
+
+pub struct ClassDefinition {
+    pub name: Ustr,
+    pub inherits_from: Option<Ustr>,
+    pub methods: Box<[FunDefinition]>,
 }
 
 #[derive(Debug)]
@@ -425,6 +468,8 @@ impl fmt::Debug for Node {
 impl fmt::Debug for Expression {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::Super => write!(f, "SUPER"),
+            Self::This => write!(f, "THIS"),
             Self::Literal(literal) => fmt::Display::fmt(literal, f),
             Self::Identifier(ident) => write!(f, "IDENT {ident}"),
             Self::FunCall { fun, args } => f
@@ -448,6 +493,14 @@ impl fmt::Debug for Statement {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Lone(expr) => fmt::Debug::fmt(expr, f),
+            Self::ThisAssignment(lhs, expr) => {
+                let mut var = String::from("this");
+                for ident in lhs {
+                    var.push('.');
+                    var.push_str(ident);
+                }
+                f.debug_struct("Assign").field("var", &var).field("expr", expr).finish()
+            }
             Self::Assignment(lhs, expr) => {
                 let mut var = String::from(lhs[0].as_str());
                 for ident in &lhs[1..] {
@@ -469,6 +522,7 @@ impl fmt::Debug for Statement {
             Self::Print(expr) => f.debug_tuple("Print").field(expr).finish(),
             Self::Block(block) => f.debug_list().entries(block).finish(),
             Self::FunDef(fun) => fmt::Debug::fmt(fun, f),
+            Self::ClassDef(class) => fmt::Debug::fmt(class, f),
             Self::If(if_stmt) => fmt::Debug::fmt(if_stmt, f),
             Self::While(condition, block) => {
                 f.debug_struct("While").field("condition", condition).field("body", block).finish()
@@ -511,5 +565,17 @@ impl fmt::Debug for FunDefinition {
             .field("arguments", &Args(self.arguments.as_ref()))
             .field("body", &self.body)
             .finish()
+    }
+}
+
+impl fmt::Debug for ClassDefinition {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut class = f.debug_struct("Class");
+        class.field("name", &self.name.as_str());
+        if let Some(inherits_from) = self.inherits_from {
+            class.field("inherits_from", &inherits_from.as_str());
+        }
+
+        class.field("methods", &self.methods).finish()
     }
 }
