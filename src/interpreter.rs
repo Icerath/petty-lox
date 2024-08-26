@@ -1,9 +1,11 @@
-use ustr::Ustr;
+use ustr::{Ustr, UstrMap};
 
 use crate::parser::{BinaryOp, Block, Expression, Literal, Node, Statement, UnaryOp};
 
 #[derive(Default)]
-pub struct Interpreter {}
+pub struct Interpreter {
+    pub variables: UstrMap<Value>,
+}
 
 impl Interpreter {
     pub fn execute(&mut self, node: &Node) -> Value {
@@ -17,6 +19,18 @@ impl Interpreter {
             Statement::Block(block) => self.exec_block(block),
             Statement::Print(expr) => self.print(expr),
             Statement::Lone(expr) => return self.exec_expression(expr),
+            Statement::Var(name, expr) => {
+                let value = match expr {
+                    Some(expr) => self.exec_expression(expr),
+                    None => Value::Nil,
+                };
+                self.variables.insert(*name, value);
+            }
+            Statement::Assignment(name, expr) => {
+                let value = self.exec_expression(expr);
+                let name = name[0];
+                self.variables.insert(name, value);
+            }
             stmt => todo!("{stmt:?}"),
         }
         Value::Nil
@@ -28,6 +42,7 @@ impl Interpreter {
     }
     fn exec_expression(&mut self, expr: &Expression) -> Value {
         match expr {
+            Expression::Identifier(ident) => self.variables.get(ident).expect(ident).clone(),
             Expression::Literal(literal) => Value::from(literal.clone()),
             Expression::BinaryExpr { operator, operands } => {
                 self.exec_bin_expr(*operator, operands)
