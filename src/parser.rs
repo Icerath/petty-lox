@@ -404,7 +404,7 @@ pub enum OrElse {
     Else(Block),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Literal {
     Number(f64),
     String(Ustr),

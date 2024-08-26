@@ -1,6 +1,8 @@
+mod interpreter;
 pub mod lexer;
 pub mod parser;
 
+use interpreter::Interpreter;
 use lexer::tokenize_spanned;
 use std::{io::Write, path::PathBuf};
 
@@ -12,6 +14,7 @@ pub struct Args {
 
 #[derive(Debug, clap::Subcommand)]
 pub enum Subcommand {
+    Run { input: PathBuf },
     Tokenize { input: PathBuf },
     Parse { input: PathBuf },
 }
@@ -39,6 +42,11 @@ pub fn run_with(args: Args, mut stdout: impl Write) -> eyre::Result<()> {
             let source = std::fs::read_to_string(input)?;
             let ast = parser::parse(&source)?;
             println!("{ast:#?}");
+        }
+        Subcommand::Run { input } => {
+            let source = std::fs::read_to_string(input)?;
+            let ast = parser::parse(&source)?;
+            Interpreter.execute(&ast);
         }
     }
     Ok(())

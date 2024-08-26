@@ -4,5 +4,4 @@ var iAmNil;
 var breakfast = "bagels";
 print breakfast;
 breakfast = "beignets";
-breakfasts.eggs = "scrambled"
 print breakfast;
