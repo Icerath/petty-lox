@@ -29,28 +29,40 @@ pub fn parse(input: &str) -> Result<Node> {
         .map(|block| Node::Statement(Statement::Block(block)))
 }
 
+pub fn parse_statement(lexer: &mut Lexer) -> Result<Statement> {
+    let pre = lexer.clone();
+    Ok(match lexer.next().transpose()?.ok_or(ParseError::UnexpectedEof)? {
+        Token::Ident(ident)
+            if matches!(lexer.clone().next().transpose()?, Some(Token::Eq | Token::Dot)) =>
+        {
+            parse_assignment(lexer, ident)?
+        }
+        Token::LBrace => parse_block(lexer).map(Statement::Block)?,
+        Token::KwIf => Statement::If(parse_if_stmt(lexer)?),
+        Token::KwWhile => parse_while_loop(lexer)?,
+        Token::KwFor => parse_for_loop(lexer)?,
+        Token::KwVar => parse_var_decl(lexer)?,
+        Token::KwPrint => Statement::Print(parse_expression(lexer)?),
+        Token::KwBreak => Statement::Break(parse_expression(lexer)?),
+        Token::KwReturn => Statement::Return(parse_expression(lexer)?),
+        _ => {
+            *lexer = pre;
+            Statement::Lone(parse_expression(lexer)?)
+        }
+    })
+}
+
 pub fn parse_statement_many(lexer: &mut Lexer) -> Result<Block> {
     let mut block = vec![];
     loop {
         let pre = lexer.clone();
         let Some(next) = lexer.next().transpose()? else { break };
         let statement = match next {
-            Token::Ident(ident)
-                if matches!(lexer.clone().next().transpose()?, Some(Token::Eq | Token::Dot)) =>
-            {
-                parse_assignment(lexer, ident)?
-            }
-            Token::LBrace => parse_block(lexer).map(Statement::Block)?,
-            Token::KwVar => parse_var_decl(lexer)?,
-            Token::KwFor => parse_for_loop(lexer)?,
-            Token::KwPrint => Statement::Print(parse_expression(lexer)?),
-            Token::KwBreak => Statement::Break(parse_expression(lexer)?),
-            Token::KwReturn => Statement::Return(parse_expression(lexer)?),
             Token::Semicolon => continue,
             Token::RBrace => break *lexer = pre,
             _ => {
                 *lexer = pre;
-                Statement::Lone(parse_expression(lexer)?)
+                parse_statement(lexer)?
             }
         };
         block.push(statement);
@@ -216,8 +228,42 @@ pub fn parse_var_decl(lexer: &mut Lexer) -> Result<Statement> {
     Ok(Statement::Var(ident, Some(expr)))
 }
 
+pub fn parse_if_stmt(lexer: &mut Lexer) -> Result<IfStatement> {
+    let condition = parse_expression(lexer)?;
+    expect(Token::LBrace, lexer)?;
+    let block = parse_block(lexer)?;
+    match lexer.clone().next().transpose()? {
+        Some(Token::KwElse) => {
+            _ = lexer.next();
+            let or_else = match lexer.next().transpose()? {
+                Some(Token::LBrace) => OrElse::Else(parse_block(lexer)?),
+                Some(Token::KwIf) => OrElse::ElseIf(Box::new(parse_if_stmt(lexer)?)),
+                Some(token) => return Err(ParseError::UnexpectedToken(token)),
+                None => return Err(ParseError::UnexpectedEof),
+            };
+            Ok(IfStatement { condition, block, or_else: Some(or_else) })
+        }
+        _ => Ok(IfStatement { condition, block, or_else: None }),
+    }
+}
+pub fn parse_while_loop(lexer: &mut Lexer) -> Result<Statement> {
+    let condition = parse_expression(lexer)?;
+    expect(Token::LBrace, lexer)?;
+    let body = parse_block(lexer)?;
+    Ok(Statement::While(condition, body))
+}
+
 pub fn parse_for_loop(lexer: &mut Lexer) -> Result<Statement> {
-    todo!()
+    expect(Token::LParen, lexer)?;
+    let init = parse_statement(lexer)?;
+    expect(Token::Semicolon, lexer)?;
+    let condition = parse_expression(lexer)?;
+    expect(Token::Semicolon, lexer)?;
+    let counter = parse_statement(lexer)?;
+    expect(Token::RParen, lexer)?;
+    expect(Token::LBrace, lexer)?;
+    let body = parse_block(lexer)?;
+    Ok(Statement::For { init: Box::new(init), condition, counter: Box::new(counter), body })
 }
 
 fn expect(expected: Token, lexer: &mut Lexer) -> Result<()> {
@@ -249,7 +295,7 @@ pub enum Statement {
     Break(Expression),
     Print(Expression),
     While(Expression, Block),
-    For(Box<[Statement; 3]>, Block),
+    For { init: Box<Statement>, condition: Expression, counter: Box<Statement>, body: Block },
     FunDef(FunDefinition),
     If(IfStatement),
     Block(Block),
@@ -263,16 +309,16 @@ impl From<Literal> for Expression {
 
 #[derive(Debug)]
 pub struct FunDefinition {
-    name: Ustr,
-    arguments: Box<[Ident]>,
-    body: Block,
+    pub name: Ustr,
+    pub arguments: Box<[Ident]>,
+    pub body: Block,
 }
 
 #[derive(Debug)]
 pub struct IfStatement {
-    condition: Box<Expression>,
-    block: Block,
-    or_else: Option<OrElse>,
+    pub condition: Expression,
+    pub block: Block,
+    pub or_else: Option<OrElse>,
 }
 
 #[derive(Debug)]
@@ -394,12 +440,12 @@ impl fmt::Debug for Statement {
                 f.debug_struct("While").field("condition", condition).field("body", block).finish()
             }
 
-            Self::For(stmts, block) => f
+            Self::For { init, condition, counter, body } => f
                 .debug_struct("For")
-                .field("init", &stmts[1])
-                .field("condition", &stmts[1])
-                .field("counter", &stmts[2])
-                .field("body", &block)
+                .field("init", &init)
+                .field("condition", &condition)
+                .field("counter", &counter)
+                .field("body", &body)
                 .finish(),
         }
     }

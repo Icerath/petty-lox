@@ -16,3 +16,4 @@ test_file!(arithmetic, "examples/arithmetic.lox");
 test_file!(data_types, "examples/data_types.lox");
 test_file!(block, "examples/block.lox");
 test_file!(variables, "examples/variables.lox");
+test_file!(control_flow, "examples/control_flow.lox");
