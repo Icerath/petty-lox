@@ -46,7 +46,7 @@ pub fn run_with(args: Args, mut stdout: impl Write) -> eyre::Result<()> {
         Subcommand::Run { input } => {
             let source = std::fs::read_to_string(input)?;
             let ast = parser::parse(&source)?;
-            Interpreter.execute(&ast);
+            Interpreter::default().execute(&ast);
         }
     }
     Ok(())
