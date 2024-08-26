@@ -34,7 +34,6 @@ pub fn run_with(args: Args, mut stdout: impl Write) -> eyre::Result<()> {
                 let token = token.map_err(|_| eyre::eyre!("Invalid token at {span:?}"))?;
                 writeln!(stdout, "{token}")?;
             }
-            writeln!(stdout, "EOF")?;
         }
         Subcommand::Parse { input } => {
             let source = std::fs::read_to_string(input)?;

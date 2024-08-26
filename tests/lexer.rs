@@ -19,7 +19,6 @@ test_file! {
     r#"
 PRINT
 STRING "Hello, World!"
-EOF
 "#
 }
 
@@ -39,6 +38,5 @@ NUMBER 123
 DOT
 DOT
 NUMBER 456
-EOF
 "#
 }
