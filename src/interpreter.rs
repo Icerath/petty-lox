@@ -37,7 +37,7 @@ impl Interpreter {
                 Value::Number(-number)
             }
             Expression::UnaryExpr { operator: UnaryOp::Not, operand } => {
-                let Value::Boolean(bool) = self.exec_expression(operand) else { todo!() };
+                let Ok(bool) = bool::try_from(self.exec_expression(operand)) else { todo!() };
                 Value::Boolean(!bool)
             }
             expr => todo!("{expr:?}"),
@@ -86,7 +86,7 @@ impl Interpreter {
                 Value::Boolean(if operator == Op::IsEq { is_eq } else { !is_eq })
             }
             Op::And | Op::Or => {
-                let Value::Boolean(lhs) = self.exec_expression(lhs) else { todo!() };
+                let Ok(lhs) = bool::try_from(self.exec_expression(lhs)) else { panic!() };
 
                 match (lhs, operator) {
                     (true, Op::Or) => Value::Boolean(true),
@@ -128,5 +128,16 @@ impl From<Literal> for Value {
             Literal::Number(number) => Self::Number(number),
             Literal::String(string) => Self::String(string),
         }
+    }
+}
+
+impl TryFrom<Value> for bool {
+    type Error = ();
+    fn try_from(value: Value) -> Result<Self, Self::Error> {
+        Ok(match value {
+            Value::Boolean(bool) => bool,
+            Value::Nil => false,
+            _ => return Err(()),
+        })
     }
 }
