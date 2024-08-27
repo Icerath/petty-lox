@@ -201,6 +201,7 @@ pub fn parse_atom_inner(lexer: &mut Lexer) -> Result<Expression> {
         Token::String(string) => Literal::String(string).into(),
         Token::KwTrue => Literal::Boolean(true).into(),
         Token::KwFalse => Literal::Boolean(false).into(),
+        Token::KwNil => Literal::Nil.into(),
         Token::KwSuper => Expression::Super,
         Token::KwThis => Expression::This,
         Token::LParen => {
