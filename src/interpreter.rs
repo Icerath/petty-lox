@@ -70,6 +70,8 @@ impl Interpreter {
                     OrElse::Else(block) => break self.exec_block(block),
                     OrElse::ElseIf(new_if) => if_stmt = new_if,
                 }
+            } else {
+                break;
             }
         }
     }
