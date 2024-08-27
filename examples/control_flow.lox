@@ -15,6 +15,9 @@ while (a <= 3) {
 print ""
 
 for (var a = 1; a <= 3; a = a + 1) {
+    if a == 1 {
+        continue
+    }
     print a;
 }
 
@@ -22,7 +25,7 @@ print ""
 
 var a = 1;
 while true {
-    if !(a <= 3) { continue }
+    if !(a <= 3) { break }
     print a;
     a = a + 1;
 }

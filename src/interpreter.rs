@@ -48,6 +48,8 @@ impl Interpreter {
             Statement::FunDef(def) => {
                 self.variables.insert(def.name, Value::Function(def.clone()));
             }
+            Statement::Break => self.control_flow = Some(ControlFlow::Break),
+            Statement::Continue => self.control_flow = Some(ControlFlow::Continue),
             Statement::Return(expr) => {
                 let value = self.exec_expression(expr);
                 self.control_flow = Some(ControlFlow::Return(value));
@@ -80,6 +82,11 @@ impl Interpreter {
             let Ok(condition) = bool::try_from(self.exec_expression(condition)) else { todo!() };
             let true = condition else { break };
             self.exec_block(block);
+            match self.control_flow {
+                Some(ControlFlow::Break) => break self.control_flow = None,
+                Some(ControlFlow::Continue) | None => {}
+                Some(ControlFlow::Return(_)) => break,
+            };
         }
     }
     fn exec_for_loop(&mut self, for_loop: &ForLoop) {
@@ -90,14 +97,23 @@ impl Interpreter {
             };
             let true = condition else { break };
             self.exec_block(&for_loop.body);
-            if self.control_flow.is_none() {
-                self.exec_statement(&for_loop.counter);
+            match &mut self.control_flow {
+                Some(ControlFlow::Break) => break self.control_flow = None,
+                Some(ControlFlow::Continue) => {
+                    self.control_flow = None;
+                    self.exec_statement(&for_loop.counter);
+                }
+                Some(ControlFlow::Return(_)) => break,
+                None => _ = self.exec_statement(&for_loop.counter),
             }
         }
     }
     fn exec_block(&mut self, block: &Block) {
         for stmt in block {
             self.exec_statement(stmt);
+            if self.control_flow.is_some() {
+                break;
+            }
         }
     }
     fn exec_expression(&mut self, expr: &Expression) -> Value {
