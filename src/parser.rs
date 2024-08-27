@@ -294,7 +294,12 @@ pub fn parse_for_loop(lexer: &mut Lexer) -> Result<Statement> {
     expect(Token::RParen, lexer)?;
     expect(Token::LBrace, lexer)?;
     let body = parse_block(lexer)?;
-    Ok(Statement::For { init: Box::new(init), condition, counter: Box::new(counter), body })
+    Ok(Statement::For(ForLoop {
+        init: Box::new(init),
+        condition,
+        counter: Box::new(counter),
+        body,
+    }))
 }
 
 pub fn parse_fun_def(lexer: &mut Lexer) -> Result<Rc<FunDefinition>> {
@@ -366,7 +371,7 @@ pub enum Statement {
     Break(Expression),
     Print(Expression),
     While(Expression, Block),
-    For { init: Box<Statement>, condition: Expression, counter: Box<Statement>, body: Block },
+    For(ForLoop),
     FunDef(Rc<FunDefinition>),
     ClassDef(ClassDefinition),
     If(IfStatement),
@@ -396,6 +401,14 @@ pub struct IfStatement {
     pub condition: Expression,
     pub block: Block,
     pub or_else: Option<OrElse>,
+}
+
+#[derive(Debug)]
+pub struct ForLoop {
+    pub init: Box<Statement>,
+    pub condition: Expression,
+    pub counter: Box<Statement>,
+    pub body: Block,
 }
 
 #[derive(Debug)]
@@ -524,17 +537,10 @@ impl fmt::Debug for Statement {
             Self::FunDef(fun) => fmt::Debug::fmt(fun, f),
             Self::ClassDef(class) => fmt::Debug::fmt(class, f),
             Self::If(if_stmt) => fmt::Debug::fmt(if_stmt, f),
+            Self::For(for_loop) => fmt::Debug::fmt(for_loop, f),
             Self::While(condition, block) => {
                 f.debug_struct("While").field("condition", condition).field("body", block).finish()
             }
-
-            Self::For { init, condition, counter, body } => f
-                .debug_struct("For")
-                .field("init", &init)
-                .field("condition", &condition)
-                .field("counter", &counter)
-                .field("body", &body)
-                .finish(),
         }
     }
 }

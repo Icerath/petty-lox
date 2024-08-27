@@ -4,7 +4,8 @@ use std::rc::Rc;
 use ustr::{Ustr, UstrMap};
 
 use crate::parser::{
-    BinaryOp, Block, Expression, FunDefinition, Literal, Node, Statement, UnaryOp,
+    BinaryOp, Block, Expression, ForLoop, FunDefinition, IfStatement, Literal, Node, OrElse,
+    Statement, UnaryOp,
 };
 
 #[allow(unused)]
@@ -51,9 +52,46 @@ impl Interpreter {
                 let value = self.exec_expression(expr);
                 self.control_flow = Some(ControlFlow::Return(value));
             }
+            Statement::If(if_stmt) => self.exec_if_stmt(if_stmt),
+            Statement::While(condition, block) => self.exec_while_loop(condition, block),
+            Statement::For(for_loop) => self.exec_for_loop(for_loop),
             stmt => todo!("{stmt:?}"),
         }
         Value::Nil
+    }
+    fn exec_if_stmt(&mut self, mut if_stmt: &IfStatement) {
+        loop {
+            let IfStatement { condition, block, or_else } = if_stmt;
+            let Ok(condition) = self.exec_expression(condition).try_into() else { todo!() };
+            if condition {
+                break self.exec_block(block);
+            } else if let Some(or_else) = or_else {
+                match or_else {
+                    OrElse::Else(block) => break self.exec_block(block),
+                    OrElse::ElseIf(new_if) => if_stmt = new_if,
+                }
+            }
+        }
+    }
+    fn exec_while_loop(&mut self, condition: &Expression, block: &Block) {
+        loop {
+            let Ok(condition) = bool::try_from(self.exec_expression(condition)) else { todo!() };
+            let true = condition else { break };
+            self.exec_block(block);
+        }
+    }
+    fn exec_for_loop(&mut self, for_loop: &ForLoop) {
+        self.exec_statement(&for_loop.init);
+        loop {
+            let Ok(condition) = bool::try_from(self.exec_expression(&for_loop.condition)) else {
+                todo!()
+            };
+            let true = condition else { break };
+            self.exec_block(&for_loop.body);
+            if self.control_flow.is_none() {
+                self.exec_statement(&for_loop.counter);
+            }
+        }
     }
     fn exec_block(&mut self, block: &Block) {
         for stmt in block {
