@@ -46,6 +46,7 @@ pub fn parse_statement(lexer: &mut Lexer) -> Result<Statement> {
         Token::KwClass => Statement::ClassDef(parse_class_def(lexer)?),
         Token::KwVar => parse_var_decl(lexer)?,
         Token::KwPrint => Statement::Print(parse_expression(lexer)?),
+        Token::KwContinue => Statement::Continue,
         Token::KwBreak => Statement::Break,
         Token::KwReturn => Statement::Return(parse_expression(lexer)?),
         _ => {
@@ -368,8 +369,9 @@ pub enum Statement {
     ThisAssignment(Box<[Ustr]>, Expression),
     Lone(Expression),
     Var(Ident, Option<Expression>),
-    Return(Expression),
+    Continue,
     Break,
+    Return(Expression),
     Print(Expression),
     While(Expression, Block),
     For(ForLoop),
@@ -531,8 +533,9 @@ impl fmt::Debug for Statement {
                 }
                 var.finish()
             }
-            Self::Return(expr) => f.debug_tuple("Return").field(expr).finish(),
+            Self::Continue => write!(f, "Continue"),
             Self::Break => write!(f, "Break"),
+            Self::Return(expr) => f.debug_tuple("Return").field(expr).finish(),
             Self::Print(expr) => f.debug_tuple("Print").field(expr).finish(),
             Self::Block(block) => f.debug_list().entries(block).finish(),
             Self::FunDef(fun) => fmt::Debug::fmt(fun, f),

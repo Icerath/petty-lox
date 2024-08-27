@@ -7,11 +7,22 @@ if (condition) {
 }
 
 var a = 1;
-while (a < 10) {
+while (a <= 3) {
     print a;
     a = a + 1;
 }
 
-for (var a = 1; a < 10; a = a + 1) {
+print ""
+
+for (var a = 1; a <= 3; a = a + 1) {
     print a;
+}
+
+print ""
+
+var a = 1;
+while true {
+    if !(a <= 3) { continue }
+    print a;
+    a = a + 1;
 }
