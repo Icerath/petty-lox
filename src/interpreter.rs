@@ -1,10 +1,23 @@
+use core::fmt;
+use std::rc::Rc;
+
 use ustr::{Ustr, UstrMap};
 
-use crate::parser::{BinaryOp, Block, Expression, Literal, Node, Statement, UnaryOp};
+use crate::parser::{
+    BinaryOp, Block, Expression, FunDefinition, Literal, Node, Statement, UnaryOp,
+};
+
+#[allow(unused)]
+enum ControlFlow {
+    Continue,
+    Break,
+    Return(Value),
+}
 
 #[derive(Default)]
 pub struct Interpreter {
-    pub variables: UstrMap<Value>,
+    control_flow: Option<ControlFlow>,
+    variables: UstrMap<Value>,
 }
 
 impl Interpreter {
@@ -31,6 +44,13 @@ impl Interpreter {
                 let name = name[0];
                 self.variables.insert(name, value);
             }
+            Statement::FunDef(def) => {
+                self.variables.insert(def.name, Value::Function(def.clone()));
+            }
+            Statement::Return(expr) => {
+                let value = self.exec_expression(expr);
+                self.control_flow = Some(ControlFlow::Return(value));
+            }
             stmt => todo!("{stmt:?}"),
         }
         Value::Nil
@@ -54,6 +74,25 @@ impl Interpreter {
             Expression::UnaryExpr { operator: UnaryOp::Not, operand } => {
                 let Ok(bool) = bool::try_from(self.exec_expression(operand)) else { todo!() };
                 Value::Boolean(!bool)
+            }
+            Expression::FunCall { fun, args } => {
+                let fun = match self.exec_expression(fun) {
+                    Value::Function(fun) => fun,
+                    value => panic!("Expected function got {value:?}"),
+                };
+                let mut arg_values = Vec::with_capacity(args.len());
+                for arg in args {
+                    arg_values.push(self.exec_expression(arg));
+                }
+                for (&arg, value) in fun.arguments.iter().zip(arg_values) {
+                    self.variables.insert(arg, value);
+                }
+                self.exec_block(&fun.body);
+                match self.control_flow.take() {
+                    Some(ControlFlow::Break | ControlFlow::Continue) => todo!(),
+                    Some(ControlFlow::Return(value)) => value,
+                    None => Value::Nil,
+                }
             }
             expr => todo!("{expr:?}"),
         }
@@ -127,11 +166,24 @@ impl Interpreter {
     }
     fn print(&mut self, expr: &Expression) {
         let value = self.exec_expression(expr);
-        match value {
-            Value::Nil => println!("nil"),
-            Value::Boolean(bool) => println!("{bool}"),
-            Value::Number(number) => println!("{number}"),
-            Value::String(string) => println!("{string}"),
+        println!("{}", DisplayValue(self, value));
+    }
+}
+
+#[allow(unused)]
+struct DisplayValue<'a>(&'a Interpreter, Value);
+impl fmt::Display for DisplayValue<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match &self.1 {
+            Value::Nil => write!(f, "nil"),
+            Value::Boolean(bool) => write!(f, "{bool}"),
+            Value::Number(number) => write!(f, "{number}"),
+            Value::String(string) => write!(f, "{string}"),
+            // Print functions like python does for now
+            Value::Function(function) => {
+                let ptr = std::ptr::from_ref(function.as_ref());
+                write!(f, r#"<function {} at {ptr:#?}>)"#, function.name,)
+            }
         }
     }
 }
@@ -142,6 +194,7 @@ pub enum Value {
     Boolean(bool),
     Number(f64),
     String(Ustr),
+    Function(Rc<FunDefinition>),
 }
 
 impl From<Literal> for Value {

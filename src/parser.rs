@@ -1,4 +1,4 @@
-use std::fmt;
+use std::{fmt, rc::Rc};
 
 use logos::Logos;
 use ustr::Ustr;
@@ -297,13 +297,13 @@ pub fn parse_for_loop(lexer: &mut Lexer) -> Result<Statement> {
     Ok(Statement::For { init: Box::new(init), condition, counter: Box::new(counter), body })
 }
 
-pub fn parse_fun_def(lexer: &mut Lexer) -> Result<FunDefinition> {
+pub fn parse_fun_def(lexer: &mut Lexer) -> Result<Rc<FunDefinition>> {
     let name = expect_ident(lexer)?;
     expect(Token::LParen, lexer)?;
     let arguments = parse_seperated_idents(lexer, Token::Comma, Token::RParen)?;
     expect(Token::LBrace, lexer)?;
     let body = parse_block(lexer)?;
-    Ok(FunDefinition { name, arguments, body })
+    Ok(Rc::new(FunDefinition { name, arguments, body }))
 }
 
 pub fn parse_class_def(lexer: &mut Lexer) -> Result<ClassDefinition> {
@@ -367,7 +367,7 @@ pub enum Statement {
     Print(Expression),
     While(Expression, Block),
     For { init: Box<Statement>, condition: Expression, counter: Box<Statement>, body: Block },
-    FunDef(FunDefinition),
+    FunDef(Rc<FunDefinition>),
     ClassDef(ClassDefinition),
     If(IfStatement),
     Block(Block),
@@ -388,7 +388,7 @@ pub struct FunDefinition {
 pub struct ClassDefinition {
     pub name: Ustr,
     pub inherits_from: Option<Ustr>,
-    pub methods: Box<[FunDefinition]>,
+    pub methods: Box<[Rc<FunDefinition>]>,
 }
 
 #[derive(Debug)]
